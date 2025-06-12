@@ -1,15 +1,29 @@
 from rest_framework import serializers
-from .models import Post
 from django.contrib.auth.models import User
-from .models import Post, Share, Like
+from .models import Post, Share, Like, Comment
 
-class PostSerializer(serializers.ModelSerializer):
+class CommentSerializer(serializers.ModelSerializer):
     author_username = serializers.ReadOnlyField(source='author.username')
 
     class Meta:
+        model = Comment
+        fields = ['id', 'author_username', 'content', 'created_datetime']
+        read_only_fields = ['id', 'author_username', 'created_datetime']
+
+class PostSerializer(serializers.ModelSerializer):
+    author_username = serializers.ReadOnlyField(source='author.username')
+    comments = CommentSerializer(many=True, read_only=True)
+
+    class Meta:
         model = Post
-        fields = ['id', 'author_username', 'created_datetime', 'title', 'content', 'share_count', 'like_count']
-        read_only_fields = ['id', 'author_username', 'created_datetime', 'share_count', 'like_count']
+        fields = [
+            'id', 'author_username', 'created_datetime', 'title', 'content', 
+            'share_count', 'like_count', 'comment_count', 'comments'
+        ]
+        read_only_fields = [
+            'id', 'author_username', 'created_datetime', 
+            'share_count', 'like_count', 'comment_count'
+        ]
 
 class ShareSerializer(serializers.ModelSerializer):
     user_username = serializers.ReadOnlyField(source='user.username')
@@ -38,4 +52,3 @@ class UserSerializer(serializers.ModelSerializer):
             password=validated_data['password']
         )
         return user
-
