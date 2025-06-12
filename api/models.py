@@ -11,6 +11,7 @@ class Post(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()
     share_count = models.PositiveIntegerField(default=0)
+    like_count = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.title
@@ -20,7 +21,6 @@ class Post(models.Model):
 
 
 class Share(models.Model):
-    """Representa a ação de um usuário compartilhando um post."""
     user = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -39,3 +39,15 @@ class Share(models.Model):
 
     def __str__(self):
         return f'{self.user.username} shared "{self.original_post.title}"'
+
+
+class Like(models.Model):
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
+    created_datetime = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'post')
+
+    def __str__(self):
+        return f'{self.user.username} liked "{self.post.title}"'

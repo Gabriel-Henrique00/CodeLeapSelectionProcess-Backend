@@ -7,8 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action
-from .models import Post, Share
-from .serializers import PostSerializer, UserSerializer, ShareSerializer
+from .models import Post, Share, Like
+from .serializers import PostSerializer, UserSerializer, ShareSerializer, LikeSerializer
 from .permissions import IsAuthorOrReadOnly
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -91,3 +91,38 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = ShareSerializer(user_shares, many=True)
         return Response(serializer.data)
+
+
+class LikePostAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            post_to_like = Post.objects.get(pk=pk)
+        except Post.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            like, created = Like.objects.get_or_create(
+                user=request.user,
+                post=post_to_like
+            )
+            if not created:
+                return Response({"error": "You have already liked this post."}, status=status.HTTP_400_BAD_REQUEST)
+            post_to_like.like_count += 1
+            post_to_like.save(update_fields=['like_count'])
+
+        return Response(LikeSerializer(like).data, status=status.HTTP_201_CREATED)
+
+    def delete(self, request, pk):
+        try:
+            post_to_unlike = Post.objects.get(pk=pk)
+            with transaction.atomic():
+                like = Like.objects.get(user=request.user, post=post_to_unlike)
+                like.delete()
+                if post_to_unlike.like_count > 0:
+                    post_to_unlike.like_count -= 1
+                    post_to_unlike.save(update_fields=['like_count'])
+                return Response(status=status.HTTP_204_NO_CONTENT)
+        except (Post.DoesNotExist, Like.DoesNotExist):
+            return Response(status=status.HTTP_404_NOT_FOUND)
