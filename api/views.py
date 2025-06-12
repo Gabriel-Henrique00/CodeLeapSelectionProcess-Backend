@@ -1,26 +1,67 @@
 from django.db import transaction
-from rest_framework import viewsets, permissions, generics, status
 from django.contrib.auth.models import User
+from rest_framework import viewsets, permissions, generics, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.decorators import action
-from .models import Post, Share, Like
-from .serializers import PostSerializer, UserSerializer, ShareSerializer, LikeSerializer
+from .models import Post, Share, Like, Comment
+from .serializers import (PostSerializer,UserSerializer,ShareSerializer,LikeSerializer,CommentSerializer)
 from .permissions import IsAuthorOrReadOnly
 
+
 class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.all()
+    queryset = Post.objects.all().prefetch_related('comments', 'comments__author')
     serializer_class = PostSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['author__username', 'title']
     filterset_fields = ['created_datetime']
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def trending(self, request):
+        trending_posts = self.get_queryset().order_by('-like_count', '-created_datetime')
+        page = self.paginate_queryset(trending_posts)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(trending_posts, many=True)
+        return Response(serializer.data)
+
+
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    lookup_field = 'username'
+
+    @action(detail=True, methods=['get'])
+    def posts(self, request, username=None):
+        user = self.get_object()
+        user_posts = user.posts.all()
+        page = self.paginate_queryset(user_posts)
+        if page is not None:
+            serializer = PostSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = PostSerializer(user_posts, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def shares(self, request, username=None):
+        user = self.get_object()
+        user_shares = user.shares.all()
+        page = self.paginate_queryset(user_shares)
+        if page is not None:
+            serializer = ShareSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ShareSerializer(user_shares, many=True)
+        return Response(serializer.data)
 
 
 class UserCreateAPIView(generics.CreateAPIView):
@@ -58,44 +99,13 @@ class RepostAPIView(APIView):
                 if post_to_unshare.share_count > 0:
                     post_to_unshare.share_count -= 1
                     post_to_unshare.save(update_fields=['share_count'])
-
                 return Response(status=status.HTTP_204_NO_CONTENT)
         except (Post.DoesNotExist, Share.DoesNotExist):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    lookup_field = 'username'
-
-    @action(detail=True, methods=['get'])
-    def posts(self, request, username=None):
-        user = self.get_object()
-        user_posts = user.posts.all()
-        page = self.paginate_queryset(user_posts)
-        if page is not None:
-            serializer = PostSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = PostSerializer(user_posts, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
-    def shares(self, request, username=None):
-        user = self.get_object()
-        user_shares = user.shares.all()
-        page = self.paginate_queryset(user_shares)
-        if page is not None:
-            serializer = ShareSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = ShareSerializer(user_shares, many=True)
-        return Response(serializer.data)
-
 
 class LikePostAPIView(APIView):
     permission_classes = [IsAuthenticated]
-
     def post(self, request, pk):
         try:
             post_to_like = Post.objects.get(pk=pk)
@@ -126,3 +136,24 @@ class LikePostAPIView(APIView):
                 return Response(status=status.HTTP_204_NO_CONTENT)
         except (Post.DoesNotExist, Like.DoesNotExist):
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    serializer_class = CommentSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
+    def get_queryset(self):
+        return Comment.objects.filter(post_id=self.kwargs['post_pk'])
+    def perform_create(self, serializer):
+        post = Post.objects.get(pk=self.kwargs['post_pk'])
+        with transaction.atomic():
+            serializer.save(author=self.request.user, post=post)
+            post.comment_count += 1
+            post.save(update_fields=['comment_count'])
+
+    def perform_destroy(self, instance):
+        post = instance.post
+        with transaction.atomic():
+            instance.delete()
+            if post.comment_count > 0:
+                post.comment_count -= 1
+                post.save(update_fields=['comment_count'])
