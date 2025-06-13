@@ -38,8 +38,10 @@ class FullAPISuiteTests(APITestCase):
 
         cls.like_on_post1 = Like.objects.get(user=cls.user2, post=cls.post1)
         cls.share_on_post1 = Share.objects.create(user=cls.user2, original_post=cls.post1)
+        cls.comment_on_post1 = Comment.objects.create(post=cls.post1, author=cls.user2, content="User 2's Comment")
 
         cls.post1.share_count = 1
+        cls.post1.comment_count = 1
         cls.post1.save()
 
     @tag('posts', 'create')
@@ -229,6 +231,97 @@ class FullAPISuiteTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
+    @tag('comments', 'list')
+    def test_list_comments_for_a_post(self):
+        """[Comments] List comments for a specific post."""
+        response = self.client.get(f'/careers/{self.post1.id}/comments/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['content'], self.comment_on_post1.content)
+
+    @tag('comments', 'create')
+    def test_authenticated_user_can_create_comment(self):
+        """[Comments] Authenticated user can comment on a post."""
+        self.client.force_authenticate(user=self.user1)
+        comment_count_before = self.post1.comment_count
+        response = self.client.post(f'/careers/{self.post1.id}/comments/', {'content': 'New comment'})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.post1.refresh_from_db()
+        self.assertEqual(self.post1.comment_count, comment_count_before + 1)
+        self.post1.comments.last().delete()
+        self.post1.comment_count = comment_count_before
+        self.post1.save()
+
+    @tag('comments', 'permissions')
+    def test_unauthenticated_user_cannot_comment(self):
+        """[Coverage] Unauthenticated user cannot comment (401)."""
+        response = self.client.post(f'/careers/{self.post1.id}/comments/', {'content': 'Anonymous comment'})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @tag('comments', 'edge_case')
+    def test_comment_on_non_existent_post_raises_exception(self):
+        """
+        [Coverage] Tests if creating a comment on a non-existent post
+        raises Post.DoesNotExist, as per the current view implementation.
+        """
+        self.client.force_authenticate(user=self.user1)
+        with self.assertRaises(Post.DoesNotExist):
+            self.client.post('/careers/9999/comments/', {'content': 'Lost comment'})
+
+    @tag('comments', 'update')
+    def test_author_can_update_own_comment(self):
+        """[Coverage] Author can edit their own comment."""
+        self.client.force_authenticate(user=self.user2)
+        new_content = 'The comment content has been edited.'
+        response = self.client.patch(
+            f'/careers/{self.post1.id}/comments/{self.comment_on_post1.id}/',
+            {'content': new_content}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.comment_on_post1.refresh_from_db()
+        self.assertEqual(self.comment_on_post1.content, new_content)
+
+    @tag('comments', 'permissions', 'update')
+    def test_user_cannot_update_another_users_comment(self):
+        """[Coverage] User cannot edit another user's comment (403)."""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.patch(
+            f'/careers/{self.post1.id}/comments/{self.comment_on_post1.id}/',
+            {'content': 'edit attempt'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @tag('comments', 'delete')
+    def test_author_can_delete_own_comment(self):
+        """[Coverage] Author can delete their own comment."""
+        self.client.force_authenticate(user=self.user2)
+        comment_id = self.comment_on_post1.id
+        post_id = self.post1.id
+        comment_count_before = self.post1.comment_count
+
+        response = self.client.delete(f'/careers/{post_id}/comments/{comment_id}/')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Comment.objects.filter(id=comment_id).exists())
+        self.post1.refresh_from_db()
+        self.assertEqual(self.post1.comment_count, comment_count_before - 1)
+        self.comment_on_post1 = Comment.objects.create(id=comment_id, post=self.post1, author=self.user2, content="User 2's Comment")
+        self.post1.comment_count = comment_count_before
+        self.post1.save()
+
+    @tag('comments', 'permissions', 'delete')
+    def test_user_cannot_delete_another_users_comment(self):
+        """[Comments] User cannot delete another user's comment (403)."""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.delete(f'/careers/{self.post1.id}/comments/{self.comment_on_post1.id}/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @tag('comments', 'edge_case')
+    def test_update_non_existent_comment_returns_404(self):
+        """[Coverage] Editing a non-existent comment returns 404."""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.patch(f'/careers/{self.post1.id}/comments/9999/', {'content': '...'})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     @tag('users', 'profile_actions')
     def test_list_posts_for_user(self):
         """[Coverage] List posts created by a user."""
@@ -266,3 +359,4 @@ class FullAPISuiteTests(APITestCase):
         self.assertEqual(str(self.post1), self.post1.title)
         self.assertEqual(str(self.like_on_post1), f'{self.user2.username} liked "{self.post1.title}"')
         self.assertEqual(str(self.share_on_post1), f'{self.user2.username} shared "{self.post1.title}"')
+        self.assertEqual(str(self.comment_on_post1), f'Comment by {self.user2.username} on {self.post1.title}')
