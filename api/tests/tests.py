@@ -50,7 +50,7 @@ class FullAPISuiteTests(APITestCase):
         self.client.force_authenticate(user=self.user1)
         data = {'title': 'New Post', 'content': 'Content of the new post'}
         post_count_before = Post.objects.count()
-        response = self.client.post('/careers/', data)
+        response = self.client.post('/careers/posts/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Post.objects.count(), post_count_before + 1)
         self.assertEqual(Post.objects.last().author, self.user1)
@@ -58,14 +58,14 @@ class FullAPISuiteTests(APITestCase):
     @tag('posts', 'permissions')
     def test_unauthenticated_user_cannot_create_post(self):
         """[Posts] Unauthenticated user cannot create a post (401)."""
-        response = self.client.post('/careers/', {'title': 'Post', 'content': 'Content'})
+        response = self.client.post('/careers/posts/', {'title': 'Post', 'content': 'Content'})
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     @tag('posts', 'update')
     def test_author_can_update_own_post(self):
         """[Posts] Author can update their own post."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.patch(f'/careers/{self.post1.id}/', {'title': 'Edited Title'})
+        response = self.client.patch(f'/careers/posts/{self.post1.id}/', {'title': 'Edited Title'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.post1.refresh_from_db()
         self.assertEqual(self.post1.title, 'Edited Title')
@@ -74,7 +74,7 @@ class FullAPISuiteTests(APITestCase):
     def test_user_cannot_update_another_users_post(self):
         """[Posts] User cannot update another user's post (403)."""
         self.client.force_authenticate(user=self.user2)
-        response = self.client.patch(f'/careers/{self.post1.id}/', {'title': 'Attempt'})
+        response = self.client.patch(f'/careers/posts/{self.post1.id}/', {'title': 'Attempt'})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @tag('posts', 'delete')
@@ -83,7 +83,7 @@ class FullAPISuiteTests(APITestCase):
         self.client.force_authenticate(user=self.user1)
         temp_post = Post.objects.create(author=self.user1, title="Post to delete", content="...")
         post_id = temp_post.id
-        response = self.client.delete(f'/careers/{post_id}/')
+        response = self.client.delete(f'/careers/posts/{post_id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Post.objects.filter(id=post_id).exists())
 
@@ -92,7 +92,7 @@ class FullAPISuiteTests(APITestCase):
     def test_user_cannot_delete_another_users_post(self):
         """[Coverage] User cannot delete another user's post (403)."""
         self.client.force_authenticate(user=self.user2)
-        response = self.client.delete(f'/careers/{self.post1.id}/')
+        response = self.client.delete(f'/careers/posts/{self.post1.id}/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @tag('posts', 'trending')
@@ -101,7 +101,7 @@ class FullAPISuiteTests(APITestCase):
         self.post2.like_count = 2
         self.post2.save()
 
-        response = self.client.get('/careers/trending/')
+        response = self.client.get('/careers/posts/trending/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreater(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['id'], self.post2.id)
@@ -109,7 +109,7 @@ class FullAPISuiteTests(APITestCase):
     @tag('posts', 'trending', 'pagination')
     def test_trending_endpoint_is_paginated(self):
         """[Coverage] 'Trending' endpoint is paginated correctly."""
-        response = self.client.get('/careers/trending/')
+        response = self.client.get('/careers/posts/trending/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('count', response.data)
         self.assertIn('next', response.data)
@@ -124,7 +124,7 @@ class FullAPISuiteTests(APITestCase):
         """[Interactions] Authenticated user can like a post."""
         self.client.force_authenticate(user=self.user1)
         like_count_before = self.post2.like_count
-        response = self.client.post(f'/careers/{self.post2.id}/like/')
+        response = self.client.post(f'/careers/posts/{self.post2.id}/like/')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.post2.refresh_from_db()
         self.assertEqual(self.post2.like_count, like_count_before + 1)
@@ -132,7 +132,7 @@ class FullAPISuiteTests(APITestCase):
     @tag('interactions', 'like', 'permissions')
     def test_unauthenticated_user_cannot_like_post(self):
         """[Coverage] Unauthenticated user cannot like a post (401)."""
-        response = self.client.post(f'/careers/{self.post2.id}/like/')
+        response = self.client.post(f'/careers/posts/{self.post2.id}/like/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     @tag('interactions', 'like', 'delete')
@@ -140,7 +140,7 @@ class FullAPISuiteTests(APITestCase):
         """[Interactions] User can remove their like from a post."""
         self.client.force_authenticate(user=self.user2)
         like_count_before = self.post1.like_count
-        response = self.client.delete(f'/careers/{self.post1.id}/like/')
+        response = self.client.delete(f'/careers/posts/{self.post1.id}/like/')
         self.post1.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(self.post1.like_count, like_count_before - 1)
@@ -152,21 +152,21 @@ class FullAPISuiteTests(APITestCase):
     def test_like_non_existent_post_returns_404(self):
         """[Coverage] Liking a non-existent post returns 404."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post('/careers/9999/like/')
+        response = self.client.post('/careers/posts/9999/like/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     @tag('interactions', 'like', 'edge_case')
     def test_unlike_post_user_has_not_liked_returns_404(self):
         """[Coverage] Unliking a post the user has not liked returns 404."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.delete(f'/careers/{self.post2.id}/like/')
+        response = self.client.delete(f'/careers/posts/{self.post2.id}/like/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     @tag('interactions', 'like', 'edge_case')
     def test_user_cannot_like_a_post_twice(self):
         """[Coverage] User cannot like the same post twice."""
         self.client.force_authenticate(user=self.user2)
-        response = self.client.post(f'/careers/{self.post1.id}/like/')
+        response = self.client.post(f'/careers/posts/{self.post1.id}/like/')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @tag('interactions', 'share', 'create')
@@ -174,7 +174,7 @@ class FullAPISuiteTests(APITestCase):
         """[Coverage] Authenticated user can share a post."""
         self.client.force_authenticate(user=self.user1)
         share_count_before = self.post2.share_count
-        response = self.client.post(f'/careers/{self.post2.id}/repost/')
+        response = self.client.post(f'/careers/posts/{self.post2.id}/repost/')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.post2.refresh_from_db()
         self.assertEqual(self.post2.share_count, share_count_before + 1)
@@ -186,7 +186,7 @@ class FullAPISuiteTests(APITestCase):
     @tag('interactions', 'share', 'permissions')
     def test_unauthenticated_user_cannot_share_post(self):
         """[Coverage] Unauthenticated user cannot share a post (401)."""
-        response = self.client.post(f'/careers/{self.post1.id}/repost/')
+        response = self.client.post(f'/careers/posts/{self.post1.id}/repost/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     @tag('interactions', 'share', 'delete')
@@ -194,7 +194,7 @@ class FullAPISuiteTests(APITestCase):
         """[Interactions] User can remove their share from a post."""
         self.client.force_authenticate(user=self.user2)
         share_count_before = self.post1.share_count
-        response = self.client.delete(f'/careers/{self.post1.id}/repost/')
+        response = self.client.delete(f'/careers/posts/{self.post1.id}/repost/')
         self.post1.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(self.post1.share_count, share_count_before - 1)
@@ -206,35 +206,35 @@ class FullAPISuiteTests(APITestCase):
     def test_unshare_post_user_has_not_shared_returns_404(self):
         """[Coverage] Unsharing a post the user has not shared returns 404."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.delete(f'/careers/{self.post1.id}/repost/')
+        response = self.client.delete(f'/careers/posts/{self.post1.id}/repost/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     @tag('interactions', 'share', 'permissions')
     def test_user_cannot_share_own_post(self):
         """[Interactions] User cannot share their own post."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post(f'/careers/{self.post1.id}/repost/')
+        response = self.client.post(f'/careers/posts/{self.post1.id}/repost/')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @tag('interactions', 'share', 'edge_case')
     def test_share_non_existent_post_returns_404(self):
         """[Coverage] Sharing a non-existent post returns 404."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post('/careers/9999/repost/')
+        response = self.client.post('/careers/posts/9999/repost/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     @tag('interactions', 'share', 'edge_case')
     def test_user_cannot_share_a_post_twice(self):
         """[Coverage] User cannot share the same post twice."""
         self.client.force_authenticate(user=self.user2)
-        response = self.client.post(f'/careers/{self.post1.id}/repost/')
+        response = self.client.post(f'/careers/posts/{self.post1.id}/repost/')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
     @tag('comments', 'list')
     def test_list_comments_for_a_post(self):
         """[Comments] List comments for a specific post."""
-        response = self.client.get(f'/careers/{self.post1.id}/comments/')
+        response = self.client.get(f'/careers/posts/{self.post1.id}/comments/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['content'], self.comment_on_post1.content)
@@ -244,7 +244,7 @@ class FullAPISuiteTests(APITestCase):
         """[Comments] Authenticated user can comment on a post."""
         self.client.force_authenticate(user=self.user1)
         comment_count_before = self.post1.comment_count
-        response = self.client.post(f'/careers/{self.post1.id}/comments/', {'content': 'New comment'})
+        response = self.client.post(f'/careers/posts/{self.post1.id}/comments/', {'content': 'New comment'})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.post1.refresh_from_db()
         self.assertEqual(self.post1.comment_count, comment_count_before + 1)
@@ -255,18 +255,18 @@ class FullAPISuiteTests(APITestCase):
     @tag('comments', 'permissions')
     def test_unauthenticated_user_cannot_comment(self):
         """[Coverage] Unauthenticated user cannot comment (401)."""
-        response = self.client.post(f'/careers/{self.post1.id}/comments/', {'content': 'Anonymous comment'})
+        response = self.client.post(f'/careers/posts/{self.post1.id}/comments/', {'content': 'Anonymous comment'})
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     @tag('comments', 'edge_case')
-    def test_comment_on_non_existent_post_raises_exception(self):
+    def test_comment_on_non_existent_post_returns_404(self):
         """
         [Coverage] Tests if creating a comment on a non-existent post
         raises Post.DoesNotExist, as per the current view implementation.
         """
         self.client.force_authenticate(user=self.user1)
         with self.assertRaises(Post.DoesNotExist):
-            self.client.post('/careers/9999/comments/', {'content': 'Lost comment'})
+            self.client.post('/careers/posts/9999/comments/', {'content': 'Lost comment'})
 
     @tag('comments', 'update')
     def test_author_can_update_own_comment(self):
@@ -274,7 +274,7 @@ class FullAPISuiteTests(APITestCase):
         self.client.force_authenticate(user=self.user2)
         new_content = 'The comment content has been edited.'
         response = self.client.patch(
-            f'/careers/{self.post1.id}/comments/{self.comment_on_post1.id}/',
+            f'/careers/posts/{self.post1.id}/comments/{self.comment_on_post1.id}/',
             {'content': new_content}
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -286,7 +286,7 @@ class FullAPISuiteTests(APITestCase):
         """[Coverage] User cannot edit another user's comment (403)."""
         self.client.force_authenticate(user=self.user1)
         response = self.client.patch(
-            f'/careers/{self.post1.id}/comments/{self.comment_on_post1.id}/',
+            f'/careers/posts/{self.post1.id}/comments/{self.comment_on_post1.id}/',
             {'content': 'edit attempt'}
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -299,7 +299,7 @@ class FullAPISuiteTests(APITestCase):
         post_id = self.post1.id
         comment_count_before = self.post1.comment_count
 
-        response = self.client.delete(f'/careers/{post_id}/comments/{comment_id}/')
+        response = self.client.delete(f'/careers/posts/{post_id}/comments/{comment_id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Comment.objects.filter(id=comment_id).exists())
         self.post1.refresh_from_db()
@@ -312,14 +312,14 @@ class FullAPISuiteTests(APITestCase):
     def test_user_cannot_delete_another_users_comment(self):
         """[Comments] User cannot delete another user's comment (403)."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.delete(f'/careers/{self.post1.id}/comments/{self.comment_on_post1.id}/')
+        response = self.client.delete(f'/careers/posts/{self.post1.id}/comments/{self.comment_on_post1.id}/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @tag('comments', 'edge_case')
     def test_update_non_existent_comment_returns_404(self):
         """[Coverage] Editing a non-existent comment returns 404."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.patch(f'/careers/{self.post1.id}/comments/9999/', {'content': '...'})
+        response = self.client.patch(f'/careers/posts/{self.post1.id}/comments/9999/', {'content': '...'})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     @tag('users', 'list')
