@@ -1,0 +1,7 @@
+Django>=5.2.3
+djangorestframework
+djangorestframework-simplejwt
+drf-spectacular
+django-cors-headers
+django-filter
+Faker
