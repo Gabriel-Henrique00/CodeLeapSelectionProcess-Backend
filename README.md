@@ -142,12 +142,12 @@ The API provides the following main routes:
     ```
 
     The API will be available at `http://127.0.0.1:8000/`.
-
+    I recommend using swagger http://127.0.0.1:8000/api/schema/swagger-ui/
 ### API Documentation
 
 Once the server is running, you can access the API documentation at:
 
-* **Swagger UI**: `http://127.0.0.1:8000/api/schema/swagger-ui/`
+* **Swagger UI**: `http://127.0.0.1:8000/api/schema/swagger-ui/` (Most Recommend)
 * **ReDoc**: `http://127.0.0.1:8000/api/schema/redoc/`
 * **OpenAPI Schema (YAML/JSON)**: `http://127.0.0.1:8000/api/schema/`
 
