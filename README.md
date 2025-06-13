@@ -167,7 +167,7 @@ To authenticate with the API, follow these steps:
     python manage.py migrate
     python manage.py seed_data
     ```
-6.  **Create a Django Superuser (Optional):**
+5.  **Create a Django Superuser (Optional):**
 
 If you need administrative access to the Django admin panel, you can create a superuser:
 
@@ -175,7 +175,7 @@ If you need administrative access to the Django admin panel, you can create a su
    python manage.py createsuperuser
    ```
 
-5.  **Run the development server:**
+6.  **Run the development server:**
 
     ```bash
     python manage.py runserver
