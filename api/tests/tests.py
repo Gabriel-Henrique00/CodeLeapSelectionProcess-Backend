@@ -322,6 +322,13 @@ class FullAPISuiteTests(APITestCase):
         response = self.client.patch(f'/careers/{self.post1.id}/comments/9999/', {'content': '...'})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    @tag('users', 'list')
+    def test_list_users(self):
+        """[Users] List all users."""
+        response = self.client.get('/careers/users/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), User.objects.count())
+
     @tag('users', 'profile_actions')
     def test_list_posts_for_user(self):
         """[Coverage] List posts created by a user."""
@@ -352,6 +359,72 @@ class FullAPISuiteTests(APITestCase):
         self.assertIn('count', response.data)
         self.assertEqual(response.data['count'], 12)
         self.assertEqual(len(response.data['results']), 10)
+
+
+    @tag('users', 'profile_actions', 'edge_case')
+    def test_list_posts_for_non_existent_user_returns_404(self):
+        """[Coverage] Listing posts for a non-existent user returns 404."""
+        response = self.client.get('/careers/users/nonexistentuser/posts/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    @tag('users', 'profile_actions', 'edge_case')
+    def test_list_shares_for_non_existent_user_returns_404(self):
+        """[Coverage] Listing shares for a non-existent user returns 404."""
+        response = self.client.get('/careers/users/nonexistentuser/shares/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+    @tag('users', 'profile_actions', 'edge_case')
+    def test_list_posts_for_user_with_no_posts(self):
+        """[Coverage] Listing posts for a user with no posts returns an empty list."""
+        user3 = User.objects.create_user(username='user3', password='123')
+        response = self.client.get(f'/careers/users/{user3.username}/posts/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 0)
+
+    @tag('users', 'profile_actions', 'edge_case')
+    def test_list_shares_for_user_with_no_shares(self):
+        """[Coverage] Listing shares for a user with no shares returns an empty list."""
+        user3 = User.objects.create_user(username='user3-no-shares', password='123')
+        response = self.client.get(f'/careers/users/{user3.username}/shares/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 0)
+
+    @tag('registration')
+    def test_user_can_register_with_valid_data(self):
+        """[Registration] User can register with valid data."""
+        user_count_before = User.objects.count()
+        data = {'username': 'newuser', 'password': 'newpassword123'}
+        response = self.client.post('/api/register/', data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(User.objects.count(), user_count_before + 1)
+        self.assertNotIn('password', response.data)
+        self.assertEqual(response.data['username'], 'newuser')
+
+
+    @tag('registration', 'validation')
+    def test_user_cannot_register_with_existing_username(self):
+        """[Registration] Cannot register with an existing username."""
+        data = {'username': self.user1.username, 'password': 'newpassword123'}
+        response = self.client.post('/api/register/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @tag('auth', 'jwt')
+    def test_user_can_get_jwt_token(self):
+        """[Coverage] User can get a JWT token with valid credentials."""
+        data = {'username': self.user1.username, 'password': 'password123'}
+        response = self.client.post('/api/token/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+    @tag('auth', 'jwt')
+    def test_user_cannot_get_jwt_token_with_invalid_credentials(self):
+        """[Coverage] User cannot get a JWT token with invalid credentials."""
+        data = {'username': self.user1.username, 'password': 'wrongpassword'}
+        response = self.client.post('/api/token/', data)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
     @tag('models', 'coverage')
     def test_model_str_representations(self):
