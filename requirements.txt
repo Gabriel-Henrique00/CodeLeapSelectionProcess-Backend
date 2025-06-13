@@ -5,3 +5,4 @@ drf-spectacular
 django-cors-headers
 django-filter
 Faker
+drf-nested-routers
